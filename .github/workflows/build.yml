@@ -1,213 +1,25 @@
-name: Build Android APK - Complete Diagnostic
-
-on: 
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+name: Build APK
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Complete System Diagnostic
-      run: |
-        echo "=== SYSTEM DIAGNOSTICS ==="
-        echo "Python version:"
-        python3 --version || echo "Python3 not found"
-        echo "Python3 path:"
-        which python3 || echo "No python3 in PATH"
-        echo "Java version:"
-        java -version || echo "Java not found"
-        javac -version || echo "Javac not found"
-        echo "Disk space:"
-        df -h
-        echo "Memory:"
-        free -h
-        
-    - name: Install System Dependencies
-      run: |
-        echo "=== INSTALLING DEPENDENCIES ==="
-        sudo apt update
-        sudo apt install -y \
-          python3 \
-          python3-pip \
-          python3-venv \
-          git \
-          wget \
-          zip \
-          unzip \
-          openjdk-8-jdk \
-          autoconf \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          libncurses5-dev \
-          cmake \
-          libffi-dev \
-          libssl-dev \
-          ninja-build
-        
-    - name: Project Structure Analysis
-      run: |
-        echo "=== PROJECT STRUCTURE ==="
-        echo "Current directory:"
-        pwd
-        echo "All files:"
-        ls -la
-        echo "Python files:"
-        find . -name "*.py" -type f
-        echo "Checking critical files:"
-        [ -f "main.py" ] && echo "✓ main.py exists" || echo "✗ main.py MISSING"
-        [ -f "App.py" ] && echo "✓ App.py exists" || echo "✗ App.py MISSING" 
-        [ -f "buildozer.spec" ] && echo "✓ buildozer.spec exists" || echo "✗ buildozer.spec MISSING"
-        [ -d "Templates" ] && echo "✓ Templates directory exists" || echo "✗ Templates directory MISSING"
-        [ -d "static" ] && echo "✓ static directory exists" || echo "✗ static directory MISSING"
-        
-        echo "=== FILE CONTENTS ==="
-        if [ -f "main.py" ]; then
-          echo "main.py (first 10 lines):"
-          head -10 main.py
-        fi
-        
-        if [ -f "buildozer.spec" ]; then
-          echo "buildozer.spec content:"
-          cat buildozer.spec
-        fi
-        
-    - name: Create Missing Critical Files
-      run: |
-        echo "=== CREATING MISSING FILES ==="
-        
-        # Create main.py if missing
-        if [ ! -f "main.py" ]; then
-          echo "Creating main.py..."
-          cat > main.py << 'EOF'
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-try:
-    from App import app
-    print("Successfully imported from App")
-except ImportError as e:
-    print(f"Import error: {e}")
-    from flask import Flask
-    app = Flask(__name__)
+    - uses: actions/checkout@v4
     
-    @app.route('/')
-    def hello():
-        return "Hello from Flask Android!"
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
-EOF
-        fi
-        
-        # Create buildozer.spec if missing
-        if [ ! -f "buildozer.spec" ]; then
-          echo "Creating buildozer.spec..."
-          buildozer init -y
-        fi
-        
-        # Create minimal Templates if missing
-        if [ ! -d "Templates" ]; then
-          echo "Creating Templates directory..."
-          mkdir -p Templates
-          cat > Templates/Index.html << 'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Test App</title>
-</head>
-<body>
-    <h1>Flask Android App</h1>
-    <p>Basic template working</p>
-</body>
-</html>
-EOF
-        fi
-        
-    - name: Install Buildozer Step by Step
+    - name: Install dependencies
       run: |
-        echo "=== INSTALLING BUILDOZER ==="
-        python3 -m pip install --upgrade pip
-        echo "Step 1: Installing buildozer..."
+        sudo apt update
+        sudo apt install -y python3-pip openjdk-8-jdk zlib1g-dev
         pip3 install buildozer
-        echo "Step 2: Installing Cython..."
-        pip3 install cython
-        echo "Step 3: Installing virtualenv..."
-        pip3 install virtualenv
-        echo "Step 4: Verifying installation..."
-        buildozer --version || echo "Buildozer command failed"
         
-    - name: Test Python Import
+    - name: Build APK
       run: |
-        echo "=== TESTING PYTHON IMPORTS ==="
-        python3 -c "import sys
-print('Python path:', sys.path)
-try:
-    from flask import Flask
-    print('✓ Flask imports successfully')
-except ImportError as e:
-    print('✗ Flask import failed:', e)
-try:
-    from App import app
-    print('✓ App.py imports successfully') 
-except ImportError as e:
-    print('✗ App.py import failed:', e)
-        "
-        
-    - name: Buildozer Init and Build
-      run: |
-        echo "=== BUILDOZER BUILD PROCESS ==="
-        echo "Step 1: Initialize buildozer..."
         buildozer init -y
+        buildozer android debug
         
-        echo "Step 2: Clean previous builds..."
-        buildozer android clean || echo "Clean failed (maybe first build)"
-        
-        echo "Step 3: Starting build (this will take time)..."
-        # Run build with timeout and capture all output
-        timeout 1800 buildozer android debug 2>&1 | tee complete_build.log || {
-          BUILD_EXIT_CODE=$?
-          if [ $BUILD_EXIT_CODE -eq 124 ]; then
-            echo "Build timed out after 30 minutes"
-          else
-            echo "Build failed with exit code: $BUILD_EXIT_CODE"
-          fi
-          echo "=== LAST 100 LINES OF BUILD LOG ==="
-          tail -100 complete_build.log
-          echo "=== ERRORS FOUND ==="
-          grep -i "error\|fail\|exception\|missing" complete_build.log | head -50
-          exit $BUILD_EXIT_CODE
-        }
-        
-    - name: Check Build Results
-      run: |
-        echo "=== BUILD RESULTS ==="
-        echo "Current directory contents:"
-        ls -la
-        echo "Bin directory:"
-        ls -la bin/ || echo "No bin directory"
-        echo "Buildozer directory:"
-        ls -la .buildozer/ || echo "No .buildozer directory"
-        echo "APK files:"
-        find . -name "*.apk" 2>/dev/null || echo "No APK files found"
-        
-    - name: Upload All Diagnostic Files
+    - name: Upload APK
       uses: actions/upload-artifact@v4
-      if: always()
       with:
-        name: complete-diagnostics
-        path: |
-          complete_build.log
-          .buildozer/
-          buildozer.spec
-          main.py
-          App.py
-        retention-days: 30
+        name: app
+        path: bin/*.apk
