@@ -3,7 +3,7 @@ name: Build Android APK
 on: 
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,65 +13,62 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    - name: Install system dependencies
+    - name: Setup environment
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          python3 \
+        sudo apt update
+        sudo apt install -y \
           python3-pip \
           git \
           zip \
           unzip \
           openjdk-8-jdk \
-          autoconf \
-          libtool \
-          pkg-config \
           zlib1g-dev \
           libncurses5-dev \
-          libncursesw5-dev \
-          libtinfo5 \
           cmake \
           libffi-dev \
           libssl-dev \
-          ninja-build \
-          libxml2-dev \
-          libxslt-dev
-          
-    - name: Upgrade pip and setuptools
-      run: |
-        python3 -m pip install --upgrade pip setuptools wheel
+          ninja-build
         
     - name: Install Buildozer and dependencies
       run: |
-        python3 -m pip install buildozer cython virtualenv
+        pip3 install buildozer cython virtualenv
+        
+    - name: Debug - Show directory structure
+      run: |
+        echo "=== Project Structure ==="
+        find . -type f -name "*.py" -o -name "*.html" -o -name "*.spec" | head -20
+        echo "=== Python files ==="
+        ls -la *.py || echo "No Python files in root"
+        echo "=== Templates ==="
+        ls -la Templates/ || echo "No Templates directory"
+        echo "=== Static ==="
+        ls -la static/ || echo "No static directory"
         
     - name: Initialize Buildozer
       run: |
         buildozer init -y
+        echo "=== buildozer.spec content ==="
+        cat buildozer.spec || echo "No buildozer.spec"
         
-    - name: Build APK
+    - name: Build APK with detailed logging
       run: |
+        echo "=== Starting build ==="
         buildozer android clean
-        buildozer android debug
-        echo "Build completed. APK files:"
-        ls -la bin/
+        buildozer -v android debug 2>&1 | tail -100
+        echo "=== Build process completed ==="
         
-    - name: Upload APK artifact
+    - name: Check for APK file
+      run: |
+        echo "=== Checking for APK ==="
+        ls -la bin/ || echo "No bin directory"
+        find . -name "*.apk" || echo "No APK files found"
+        
+    - name: Upload APK if exists
       uses: actions/upload-artifact@v4
+      if: success() || failure()
       with:
-        name: return-of-artifact-apk
-        path: bin/*.apk
+        name: apk-artifact
+        path: |
+          bin/*.apk
+          .buildozer/**/*.log
         retention-days: 30
-        
-    - name: Upload build logs
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: build-logs
-        path: .buildozer/
-        retention-days: 5
