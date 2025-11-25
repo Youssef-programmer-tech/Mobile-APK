@@ -1,23 +1,47 @@
 name: Build APK
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y python3-pip openjdk-8-jdk zlib1g-dev
-        pip3 install buildozer
-        
+        sudo apt install -y \
+          python3-pip python3-setuptools python3-wheel \
+          build-essential git zip zlib1g-dev \
+          libssl-dev libffi-dev libsqlite3-dev \
+          openjdk-11-jdk
+
+        pip3 install --upgrade pip
+        pip3 install Cython buildozer
+
+    - name: Install Android SDK/NDK
+      run: |
+        sudo apt install -y unzip
+
+        mkdir -p $HOME/.buildozer/android/platform
+
+        # Download commandlinetools
+        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdtools.zip
+        unzip cmdtools.zip -d $HOME/.buildozer/android/platform
+
+        yes | $HOME/.buildozer/android/platform/cmdline-tools/bin/sdkmanager --sdk_root=$HOME/.buildozer/android/platform \
+          "platform-tools" "platforms;android-31" "build-tools;31.0.0" "ndk;23.1.7779620"
+
     - name: Build APK
       run: |
-        buildozer init -y
+        # Use your existing buildozer.spec (do NOT run buildozer init)
         buildozer android debug
-        
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
