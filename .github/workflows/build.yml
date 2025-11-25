@@ -148,8 +148,7 @@ EOF
     - name: Test Python Import
       run: |
         echo "=== TESTING PYTHON IMPORTS ==="
-        python3 -c "
-import sys
+        python3 -c "import sys
 print('Python path:', sys.path)
 try:
     from flask import Flask
